@@ -12,7 +12,7 @@ import { createIssueDetailLocationState } from "../lib/issueDetailBreadcrumb";
 import { EmptyState } from "../components/EmptyState";
 import { IssuesList } from "../components/IssuesList";
 import { CircleDot } from "lucide-react";
-import { CONVERSATION_PREFIX } from "../api/conversations";
+import { isConversationIssue } from "../api/conversations";
 
 export function Issues() {
   const { selectedCompanyId } = useCompany();
@@ -106,7 +106,7 @@ export function Issues() {
 
   return (
     <IssuesList
-      issues={(issues ?? []).filter(i => !i.title?.startsWith(CONVERSATION_PREFIX))}
+      issues={(issues ?? []).filter(i => !isConversationIssue(i))}
       isLoading={isLoading}
       error={error as Error | null}
       agents={agents}

@@ -109,7 +109,7 @@ function ConversationList({
     let cancelled = false;
     const allConvos = [...conversations, ...archivedConversations];
     // Search issues with q parameter — searches titles, descriptions, and comments
-    issuesApi.list(companyId, { q: debouncedSearch }).then((results) => {
+    issuesApi.list(companyId, { q: debouncedSearch, kind: "conversation" }).then((results) => {
       if (cancelled) return;
       const convoIds = new Set(allConvos.map(c => c.id));
       const matchIds = new Set(results.filter(r => convoIds.has(r.id)).map(r => r.id));
@@ -378,7 +378,12 @@ interface AgentPickerProps {
 }
 
 function AgentPicker({ agents, loading, onPick, onCancel }: AgentPickerProps) {
-  const available = agents.filter((a) => a.status !== "terminated");
+  const available = agents.filter((a) => {
+    if (a.status === "terminated") return false;
+    // Only show agents eligible for direct conversations: CEO or managers
+    if (a.reportsTo === null) return true;
+    return agents.some((other) => other.reportsTo === a.id);
+  });
 
   return (
     <div className="flex flex-col items-center justify-center h-full px-6">
@@ -757,13 +762,13 @@ export function Conversations() {
   );
   const [creating, setCreating] = useState(false);
 
-  // Sync route param → local state
+  // Sync route param → local state (one-way: route drives state)
   useEffect(() => {
-    if (routeIssueId && routeIssueId !== activeIssueId) {
+    if (routeIssueId) {
       setActiveIssueId(routeIssueId);
       setViewMode("chat");
     }
-  }, [routeIssueId, activeIssueId]);
+  }, [routeIssueId]);
 
   useEffect(() => {
     setBreadcrumbs([{ label: "Conversations" }]);
@@ -847,6 +852,12 @@ export function Conversations() {
 
   const handleArchive = useCallback(
     async (issueId: string) => {
+      // Clear UI state immediately so the panel closes on first click
+      if (activeIssueId === issueId) {
+        setActiveIssueId(null);
+        setViewMode("list");
+        navigate("/conversations", { replace: true });
+      }
       try {
         await issuesApi.update(issueId, { status: "done" });
       } catch {
@@ -856,11 +867,6 @@ export function Conversations() {
       queryClient.invalidateQueries({
         queryKey: queryKeys.conversations.list(selectedCompanyId!),
       });
-      if (activeIssueId === issueId) {
-        setActiveIssueId(null);
-        setViewMode("list");
-        navigate("/conversations", { replace: true });
-      }
     },
     [activeIssueId, selectedCompanyId, queryClient, navigate],
   );

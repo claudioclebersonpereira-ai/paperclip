@@ -828,24 +828,26 @@ export function AgentDetail() {
           </div>
         </div>
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={startingChat}
-            onClick={async () => {
-              if (!selectedCompanyId || startingChat) return;
-              setStartingChat(true);
-              try {
-                const issue = await ensureConversation(selectedCompanyId, agent.id, agent.name);
-                navigate(`/conversations/${issue.id}`);
-              } finally {
-                setStartingChat(false);
-              }
-            }}
-          >
-            <MessageSquare className="h-3.5 w-3.5 sm:mr-1" />
-            <span className="hidden sm:inline">Chat</span>
-          </Button>
+          {agent.reportsTo === null && (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={startingChat}
+              onClick={async () => {
+                if (!selectedCompanyId || startingChat) return;
+                setStartingChat(true);
+                try {
+                  const issue = await ensureConversation(selectedCompanyId, agent.id, agent.name);
+                  navigate(`/conversations/${issue.id}`);
+                } finally {
+                  setStartingChat(false);
+                }
+              }}
+            >
+              <MessageSquare className="h-3.5 w-3.5 sm:mr-1" />
+              <span className="hidden sm:inline">Chat</span>
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"

@@ -14,7 +14,7 @@ export const CONVERSATION_PREFIX = "Conversation: ";
 
 /** Returns true when the issue represents a board↔agent conversation. */
 export function isConversationIssue(issue: Issue): boolean {
-  return typeof issue.title === "string" && issue.title.startsWith(CONVERSATION_PREFIX);
+  return issue.kind === "conversation" || (typeof issue.title === "string" && issue.title.startsWith(CONVERSATION_PREFIX));
 }
 
 /** Extract the agent display name from a conversation issue title. */
@@ -32,10 +32,9 @@ export async function listConversations(
   companyId: string,
   opts?: { includeClosed?: boolean },
 ): Promise<Issue[]> {
-  const issues = await issuesApi.list(companyId);
+  const issues = await issuesApi.list(companyId, { kind: "conversation" });
   return issues
     .filter((issue) => {
-      if (!isConversationIssue(issue)) return false;
       if (!opts?.includeClosed) {
         const status = issue.status?.toLowerCase() ?? "";
         if (status === "done" || status === "cancelled") return false;
@@ -73,6 +72,7 @@ export async function startConversation(
   agentName: string,
 ): Promise<Issue> {
   return issuesApi.create(companyId, {
+    kind: "conversation",
     title: `${CONVERSATION_PREFIX}${agentName}`,
     description: "Board conversation with agent. Awaiting first message.",
     assigneeAgentId: agentId,

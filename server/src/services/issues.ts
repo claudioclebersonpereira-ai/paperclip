@@ -61,6 +61,7 @@ function applyStatusSideEffects(
 
 export interface IssueFilters {
   status?: string;
+  kind?: string;
   assigneeAgentId?: string;
   assigneeUserId?: string;
   touchedByUserId?: string;
@@ -504,6 +505,9 @@ export function issueService(db: Db) {
       if (filters?.status) {
         const statuses = filters.status.split(",").map((s) => s.trim());
         conditions.push(statuses.length === 1 ? eq(issues.status, statuses[0]) : inArray(issues.status, statuses));
+      }
+      if (filters?.kind) {
+        conditions.push(eq(issues.kind, filters.kind));
       }
       if (filters?.assigneeAgentId) {
         conditions.push(eq(issues.assigneeAgentId, filters.assigneeAgentId));

@@ -1,7 +1,6 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { issuesApi } from "../api/issues";
-import { isConversationIssue } from "../api/conversations";
 import { queryKeys } from "../lib/queryKeys";
 
 /**
@@ -14,6 +13,7 @@ export function useConversationUnread(companyId: string | null | undefined) {
     queryKey: queryKeys.conversations.unread(companyId!),
     queryFn: () =>
       issuesApi.list(companyId!, {
+        kind: "conversation",
         touchedByUserId: "me",
         unreadForUserId: "me",
         status: "backlog,todo,in_progress,in_review,blocked",
@@ -23,7 +23,7 @@ export function useConversationUnread(companyId: string | null | undefined) {
   });
 
   const unreadConvoIds = useMemo(
-    () => new Set(unreadIssues.filter(isConversationIssue).map((i) => i.id)),
+    () => new Set(unreadIssues.map((i) => i.id)),
     [unreadIssues],
   );
 

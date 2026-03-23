@@ -7,7 +7,7 @@ import { ApiError } from "../api/client";
 import { dashboardApi } from "../api/dashboard";
 import { issuesApi } from "../api/issues";
 import { agentsApi } from "../api/agents";
-import { CONVERSATION_PREFIX } from "../api/conversations";
+import { isConversationIssue } from "../api/conversations";
 import { heartbeatsApi } from "../api/heartbeats";
 import { useCompany } from "../context/CompanyContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
@@ -379,7 +379,7 @@ export function Inbox() {
   });
 
   const touchedIssues = useMemo(
-    () => getRecentTouchedIssues(touchedIssuesRaw).filter(i => !i.title?.startsWith(CONVERSATION_PREFIX)),
+    () => getRecentTouchedIssues(touchedIssuesRaw).filter(i => !isConversationIssue(i)),
     [touchedIssuesRaw],
   );
   const unreadTouchedIssues = useMemo(

@@ -1,4 +1,4 @@
-import type { IssueOriginKind, IssuePriority, IssueStatus } from "../constants.js";
+import type { IssueKind, IssueOriginKind, IssuePriority, IssueStatus } from "../constants.js";
 import type { Goal } from "./goal.js";
 import type { Project, ProjectWorkspace } from "./project.js";
 import type { ExecutionWorkspace, IssueExecutionWorkspaceSettings } from "./workspace-runtime.js";
@@ -102,6 +102,7 @@ export interface Issue {
   goalId: string | null;
   parentId: string | null;
   ancestors?: IssueAncestor[];
+  kind: IssueKind;
   title: string;
   description: string | null;
   status: IssueStatus;

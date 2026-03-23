@@ -11,7 +11,7 @@ import { ExternalLink } from "lucide-react";
 import { Identity } from "./Identity";
 import { RunTranscriptView } from "./transcript/RunTranscriptView";
 import { useLiveRunTranscripts } from "./transcript/useLiveRunTranscripts";
-import { CONVERSATION_PREFIX } from "../api/conversations";
+import { isConversationIssue } from "../api/conversations";
 
 const MIN_DASHBOARD_RUNS = 4;
 
@@ -46,7 +46,7 @@ export function ActiveAgentsPanel({ companyId }: ActiveAgentsPanelProps) {
     () => allRuns.filter((run) => {
       if (!run.issueId) return true;
       const issue = issueById.get(run.issueId);
-      return !issue?.title?.startsWith(CONVERSATION_PREFIX);
+      return !issue || !isConversationIssue(issue);
     }),
     [allRuns, issueById],
   );

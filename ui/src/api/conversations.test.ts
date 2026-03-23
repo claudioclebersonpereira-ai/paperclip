@@ -37,6 +37,7 @@ function makeIssue(overrides: Partial<Issue> = {}): Issue {
     projectWorkspaceId: null,
     goalId: null,
     parentId: null,
+    kind: "task",
     title: "Test Issue",
     description: null,
     status: "backlog",
@@ -70,13 +71,18 @@ function makeIssue(overrides: Partial<Issue> = {}): Issue {
 // ─── isConversationIssue ────────────────────────────────────────────────────
 
 describe("isConversationIssue", () => {
-  it("returns true for issues with the conversation prefix", () => {
-    const issue = makeIssue({ title: "Conversation: Shadow" });
+  it("returns true for issues with kind=conversation", () => {
+    const issue = makeIssue({ kind: "conversation", title: "Conversation: Shadow" });
+    expect(isConversationIssue(issue)).toBe(true);
+  });
+
+  it("returns true for legacy issues with the conversation prefix (backward compat)", () => {
+    const issue = makeIssue({ kind: "task", title: "Conversation: Shadow" });
     expect(isConversationIssue(issue)).toBe(true);
   });
 
   it("returns true for titled conversations with a topic", () => {
-    const issue = makeIssue({ title: "Conversation: Shadow — Project Status" });
+    const issue = makeIssue({ kind: "conversation", title: "Conversation: Shadow — Project Status" });
     expect(isConversationIssue(issue)).toBe(true);
   });
 
@@ -122,40 +128,45 @@ describe("listConversations", () => {
     vi.clearAllMocks();
   });
 
-  it("returns only conversation issues, sorted by updatedAt descending", async () => {
+  it("passes kind=conversation to the API and sorts by updatedAt descending", async () => {
     const convo1 = makeIssue({
       id: "c1",
+      kind: "conversation",
       title: "Conversation: Shadow",
       status: "blocked",
       updatedAt: new Date("2026-03-20T00:00:00Z"),
     });
     const convo2 = makeIssue({
       id: "c2",
+      kind: "conversation",
       title: "Conversation: Forge",
       status: "blocked",
       updatedAt: new Date("2026-03-21T00:00:00Z"),
     });
-    const regular = makeIssue({ id: "r1", title: "Fix bug" });
 
-    vi.mocked(issuesApi.list).mockResolvedValue([convo1, regular, convo2]);
+    vi.mocked(issuesApi.list).mockResolvedValue([convo1, convo2]);
 
     const result = await listConversations("company-1");
     expect(result.map((i) => i.id)).toEqual(["c2", "c1"]);
+    expect(issuesApi.list).toHaveBeenCalledWith("company-1", { kind: "conversation" });
   });
 
   it("excludes done/cancelled conversations by default", async () => {
     const open = makeIssue({
       id: "c1",
+      kind: "conversation",
       title: "Conversation: Shadow",
       status: "blocked",
     });
     const done = makeIssue({
       id: "c2",
+      kind: "conversation",
       title: "Conversation: Forge",
       status: "done",
     });
     const cancelled = makeIssue({
       id: "c3",
+      kind: "conversation",
       title: "Conversation: Atlas",
       status: "cancelled",
     });
@@ -169,12 +180,14 @@ describe("listConversations", () => {
   it("includes closed conversations when includeClosed is true", async () => {
     const open = makeIssue({
       id: "c1",
+      kind: "conversation",
       title: "Conversation: Shadow",
       status: "blocked",
       updatedAt: new Date("2026-03-20T00:00:00Z"),
     });
     const done = makeIssue({
       id: "c2",
+      kind: "conversation",
       title: "Conversation: Forge",
       status: "done",
       updatedAt: new Date("2026-03-21T00:00:00Z"),
@@ -197,6 +210,7 @@ describe("ensureConversation", () => {
   it("returns an existing conversation if one exists", async () => {
     const existing = makeIssue({
       id: "existing",
+      kind: "conversation",
       title: "Conversation: Shadow",
       status: "blocked",
       assigneeAgentId: "agent-1",

@@ -3,7 +3,7 @@ name: paperclip-conversation
 description: >
   Conversation mode for board-agent chat. PRIORITY: Check this skill BEFORE
   running the normal heartbeat procedure. When wake reason is conversation_reply
-  or when the assigned issue title starts with "Conversation:", skip the standard
+  or when the assigned issue has kind "conversation", skip the standard
   heartbeat entirely and follow this lightweight conversational flow instead.
 ---
 
@@ -19,8 +19,8 @@ no checkout, no task prioritization).
 At the very start of your run, before anything else, check:
 
 1. Does `PAPERCLIP_WAKE_REASON` equal `conversation_reply`?
-2. OR does the issue from `PAPERCLIP_TASK_ID` have a title starting with `Conversation:`?
-3. OR were you woken with `PAPERCLIP_WAKE_REASON` equal `issue_assigned` and the issue title starts with `Conversation:`?
+2. OR does the issue from `PAPERCLIP_TASK_ID` have `kind` equal to `conversation`?
+3. OR were you woken with `PAPERCLIP_WAKE_REASON` equal `issue_assigned` and the issue has `kind` equal to `conversation`?
 
 If ANY of these is true → follow this skill. Do NOT run the normal heartbeat.
 

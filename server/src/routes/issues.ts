@@ -232,6 +232,7 @@ export function issueRoutes(db: Db, storage: StorageService) {
 
     const result = await svc.list(companyId, {
       status: req.query.status as string | undefined,
+      kind: req.query.kind as string | undefined,
       assigneeAgentId: req.query.assigneeAgentId as string | undefined,
       assigneeUserId,
       touchedByUserId,
