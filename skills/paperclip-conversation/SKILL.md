@@ -21,8 +21,15 @@ At the very start of your run, before anything else, check:
 1. Does `PAPERCLIP_WAKE_REASON` equal `conversation_reply`?
 2. OR does the issue from `PAPERCLIP_TASK_ID` have `kind` equal to `conversation`?
 3. OR were you woken with `PAPERCLIP_WAKE_REASON` equal `issue_assigned` and the issue has `kind` equal to `conversation`?
+4. OR were you @-mentioned in a comment on a conversation issue (`PAPERCLIP_WAKE_REASON` equal `issue_comment_mentioned` and the issue has `kind` equal to `conversation`)?
 
 If ANY of these is true → follow this skill. Do NOT run the normal heartbeat.
+
+**Assignee check**: Fetch the conversation issue and compare `assigneeAgentId` to
+your own agent ID. You are the **owner** if they match, or a **guest** if they do not.
+Guests may only post comments — they must NOT change the issue status, title, or
+assignee. This allows multiple agents to participate in a single conversation
+thread via @-mentions without interfering with the owner's state.
 
 ## Case 1: New conversation with no user messages
 
@@ -39,12 +46,13 @@ Do this and exit immediately:
    Headers: X-Paperclip-Run-Id: $PAPERCLIP_RUN_ID
    { "body": "Ready. Send your message whenever you're ready." }
 ```
-4. Set status to blocked:
+4. **If you are the owner** (assigneeAgentId matches your ID), set status to blocked:
 ```
    PATCH /api/issues/{issueId}
    Headers: X-Paperclip-Run-Id: $PAPERCLIP_RUN_ID
    { "status": "blocked" }
 ```
+   If you are a guest, skip this step.
 5. Exit. Do not fetch assignments, do not check inbox, do not do anything else.
 
 ## Case 2: Board sent a message (conversation_reply)
@@ -66,20 +74,23 @@ Do this and exit immediately:
 ```
    Write naturally and conversationally. No status reports unless asked.
 
-5. **Auto-title** (first response only): If the title is still `Conversation: {YourName}`
-   (no ` — ` separator), generate a 3-6 word topic and update:
+5. **Auto-title** (owner only, first response): If you are the owner and the title
+   is still `Conversation: {YourName}` (no ` — ` separator), generate a 3-6 word
+   topic and update:
 ```
    PATCH /api/issues/{issueId}
    Headers: X-Paperclip-Run-Id: $PAPERCLIP_RUN_ID
    { "title": "Conversation: {YourName} — {Short Topic}" }
 ```
+   If you are a guest, skip this step.
 
-6. **Status**: Set back to blocked and exit.
+6. **Status** (owner only): Set back to blocked and exit.
 ```
    PATCH /api/issues/{issueId}
    Headers: X-Paperclip-Run-Id: $PAPERCLIP_RUN_ID
    { "status": "blocked" }
 ```
+   If you are a guest, skip this step — just exit after posting your response.
 
 7. **Actions**: If the board asks you to do something concrete (hire, create task,
    set up project, make a plan), do it using the normal Paperclip APIs and explain
@@ -95,3 +106,4 @@ Do this and exit immediately:
 - Do NOT repeat full company state every message
 - Keep responses conversational, not report-style
 - Conversations stay blocked between messages — the board wakes you when ready
+- **Guests** (agents @-mentioned into someone else's conversation): post your comment and exit. Do NOT change the issue status, title, or assignee. Only the conversation owner manages issue state.
