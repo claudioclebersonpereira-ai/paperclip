@@ -23,6 +23,7 @@ import {
   FileText,
   ChevronLeft,
   FolderOpen,
+  RefreshCw,
 } from "lucide-react";
 import { cn } from "../lib/utils";
 
@@ -198,6 +199,7 @@ export function WorkspaceFileEditor({
     data: fileData,
     isLoading,
     error,
+    refetch,
   } = useQuery({
     queryKey: queryKeys.workspaceFiles.read(workspaceId, filePath),
     queryFn: () => workspaceFilesApi.read(companyId, workspaceId, filePath),
@@ -280,6 +282,18 @@ export function WorkspaceFileEditor({
             {saveMutation.isError && (
               <span className="text-xs text-destructive">Save failed</span>
             )}
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => {
+                if (isDirty && !window.confirm("Reload will discard unsaved changes. Continue?")) return;
+                setIsDirty(false);
+                refetch();
+              }}
+              title="Reload file from disk"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+            </Button>
             <Button
               variant={isDirty ? "default" : "outline"}
               size="sm"
@@ -380,6 +394,10 @@ export function WorkspaceFileBrowser({
   // Track whether we opened directly to a file (no browser context to go back to)
   const openedDirectly = useRef(!!initialFile);
 
+  useEffect(() => {
+    if (!selectedFile) openedDirectly.current = false;
+  }, [selectedFile]);
+
   if (selectedFile) {
     return (
       <WorkspaceFileEditor
@@ -399,9 +417,6 @@ export function WorkspaceFileBrowser({
       />
     );
   }
-
-  // If we reach here, the browser is shown — user navigated back from editor
-  openedDirectly.current = false;
 
   return (
     <FileBrowser
