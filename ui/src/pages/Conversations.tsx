@@ -730,6 +730,17 @@ function ConversationView({ issueId, companyId, agents, onClose, sidebarCollapse
     [workspaceId],
   );
 
+  const [browsingDir, setBrowsingDir] = useState<string | null>(null);
+
+  const handleDirPathClick = useCallback(
+    (dirPath: string) => {
+      if (!workspaceId) return;
+      const cleaned = dirPath.replace(/\/+$/, "") || ".";
+      setBrowsingDir(cleaned);
+    },
+    [workspaceId],
+  );
+
   const agentName = issue?.assigneeAgentId
     ? agentMap.get(issue.assigneeAgentId)?.name ?? "Agent"
     : "Agent";
@@ -1039,6 +1050,7 @@ function ConversationView({ issueId, companyId, agents, onClose, sidebarCollapse
             await addComment.mutateAsync({ body });
           }}
           onFilePathClick={workspaceId ? handleFilePathClick : undefined}
+          onDirPathClick={workspaceId ? handleDirPathClick : undefined}
           liveRunSlot={
             <LiveRunWidget issueId={issueId} companyId={companyId} />
           }
@@ -1065,6 +1077,19 @@ function ConversationView({ issueId, companyId, agents, onClose, sidebarCollapse
           workspaceId={workspaceId}
           initialFile={editingFile}
           onClose={() => setEditingFile(null)}
+          onSaved={() => {
+            pushToast({ title: "File saved", tone: "success" });
+          }}
+        />
+      )}
+
+      {/* ── Directory browser (from clicking a folder path in a comment) ── */}
+      {browsingDir && workspaceId && (
+        <WorkspaceFileBrowser
+          companyId={companyId}
+          workspaceId={workspaceId}
+          initialDir={browsingDir}
+          onClose={() => setBrowsingDir(null)}
           onSaved={() => {
             pushToast({ title: "File saved", tone: "success" });
           }}
@@ -1164,7 +1189,7 @@ export function Conversations() {
 
   const handlePick = useCallback(
     async (agentId: string, agentName: string) => {
-      if (!selectedCompanyId) return;
+      if (!selectedCompanyId || creating) return;
       setCreating(true);
       try {
         const issue = await ensureConversation(

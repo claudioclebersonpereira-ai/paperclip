@@ -63,6 +63,7 @@ interface CommentThreadProps {
   hideHeader?: boolean;
   emptyState?: React.ReactNode;
   onFilePathClick?: (path: string) => void;
+  onDirPathClick?: (dirPath: string) => void;
 }
 
 const DRAFT_DEBOUNCE_MS = 800;
@@ -137,6 +138,7 @@ function CommentCard({
   highlightCommentId,
   queued = false,
   onFilePathClick,
+  onDirPathClick,
 }: {
   comment: CommentWithRunMeta;
   agentMap?: Map<string, Agent>;
@@ -145,6 +147,7 @@ function CommentCard({
   highlightCommentId?: string | null;
   queued?: boolean;
   onFilePathClick?: (path: string) => void;
+  onDirPathClick?: (dirPath: string) => void;
 }) {
   const isHighlighted = highlightCommentId === comment.id;
   const isPending = comment.clientStatus === "pending";
@@ -208,7 +211,7 @@ function CommentCard({
           <CopyMarkdownButton text={comment.body} />
         </span>
       </div>
-      <MarkdownBody className="text-sm" onFilePathClick={onFilePathClick}>{comment.body}</MarkdownBody>
+      <MarkdownBody className="text-sm" onFilePathClick={onFilePathClick} onDirPathClick={onDirPathClick}>{comment.body}</MarkdownBody>
       {companyId && !isPending ? (
         <div className="mt-2 space-y-2">
           <PluginSlotOutlet
@@ -261,6 +264,7 @@ const TimelineList = memo(function TimelineList({
   highlightCommentId,
   emptyState = DEFAULT_EMPTY_STATE,
   onFilePathClick,
+  onDirPathClick,
 }: {
   timeline: TimelineItem[];
   agentMap?: Map<string, Agent>;
@@ -269,6 +273,7 @@ const TimelineList = memo(function TimelineList({
   highlightCommentId?: string | null;
   emptyState?: React.ReactNode;
   onFilePathClick?: (path: string) => void;
+  onDirPathClick?: (dirPath: string) => void;
 }) {
   if (timeline.length === 0) {
     return emptyState ? <>{emptyState}</> : null;
@@ -316,6 +321,7 @@ const TimelineList = memo(function TimelineList({
             projectId={projectId}
             highlightCommentId={highlightCommentId}
             onFilePathClick={onFilePathClick}
+            onDirPathClick={onDirPathClick}
           />
         );
       })}
@@ -349,6 +355,7 @@ export function CommentThread({
   hideHeader = false,
   emptyState,
   onFilePathClick,
+  onDirPathClick,
 }: CommentThreadProps) {
   const [body, setBody] = useState("");
   const [reopen, setReopen] = useState(true);
@@ -500,6 +507,7 @@ export function CommentThread({
         highlightCommentId={highlightCommentId}
         emptyState={emptyState}
         onFilePathClick={onFilePathClick}
+        onDirPathClick={onDirPathClick}
       />
 
       {liveRunSlot}

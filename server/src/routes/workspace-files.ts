@@ -7,6 +7,7 @@ import { eq, and } from "drizzle-orm";
 import { assertCompanyAccess } from "./authz.js";
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB
+const MAX_DIR_ENTRIES = 1000;
 
 export function workspaceFileRoutes(db: Db) {
   const router = Router();
@@ -140,8 +141,10 @@ export function workspaceFileRoutes(db: Db) {
       return;
     }
 
+    let fh: import("node:fs/promises").FileHandle | null = null;
     try {
-      const stat = await fs.stat(absolutePath);
+      fh = await fs.open(absolutePath, "r");
+      const stat = await fh.stat();
       if (stat.isDirectory()) {
         res.status(422).json({ error: "Path is a directory, not a file" });
         return;
@@ -150,7 +153,7 @@ export function workspaceFileRoutes(db: Db) {
         res.status(413).json({ error: "File exceeds 10 MB read limit" });
         return;
       }
-      const content = await fs.readFile(absolutePath, "utf8");
+      const content = await fh.readFile("utf8");
       res.json({ content, path: filePath, size: stat.size });
     } catch (err: unknown) {
       const code = errCode(err);
@@ -158,9 +161,13 @@ export function workspaceFileRoutes(db: Db) {
         res.status(404).json({ error: "File not found" });
       } else if (code === "EACCES") {
         res.status(403).json({ error: "Permission denied" });
+      } else if (code === "EISDIR") {
+        res.status(422).json({ error: "Path is a directory, not a file" });
       } else {
         res.status(500).json({ error: "Failed to read file" });
       }
+    } finally {
+      await fh?.close();
     }
   });
 
@@ -250,8 +257,10 @@ export function workspaceFileRoutes(db: Db) {
       try {
         const showHidden = String(req.query.showHidden).toLowerCase() === "true";
         const entries = await fs.readdir(absoluteDir, { withFileTypes: true });
-        const files = entries
-          .filter((e) => showHidden || !e.name.startsWith("."))
+        const filtered = entries.filter((e) => showHidden || !e.name.startsWith("."));
+        const truncated = filtered.length > MAX_DIR_ENTRIES;
+        const files = filtered
+          .slice(0, MAX_DIR_ENTRIES)
           .map((e) => ({
             name: e.name,
             path: path.posix.join(
@@ -267,7 +276,7 @@ export function workspaceFileRoutes(db: Db) {
             return a.name.localeCompare(b.name);
           });
 
-        res.json({ files });
+        res.json({ files, truncated });
       } catch (err: unknown) {
         const code = errCode(err);
         if (code === "ENOENT") {

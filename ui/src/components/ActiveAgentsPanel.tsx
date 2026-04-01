@@ -11,7 +11,6 @@ import { ExternalLink } from "lucide-react";
 import { Identity } from "./Identity";
 import { RunTranscriptView } from "./transcript/RunTranscriptView";
 import { useLiveRunTranscripts } from "./transcript/useLiveRunTranscripts";
-import { isConversationIssue } from "../api/conversations";
 
 const MIN_DASHBOARD_RUNS = 4;
 
@@ -37,16 +36,14 @@ export function ActiveAgentsPanel({ companyId }: ActiveAgentsPanelProps) {
   });
   const issueById = useMemo(() => {
     const map = new Map<string, Issue>();
-    for (const issue of issues ?? []) {
-      map.set(issue.id, issue);
-    }
+    for (const issue of issues ?? []) map.set(issue.id, issue);
     return map;
   }, [issues]);
   const runs = useMemo(
     () => allRuns.filter((run) => {
       if (!run.issueId) return true;
       const issue = issueById.get(run.issueId);
-      return !issue || !isConversationIssue(issue);
+      return !issue || issue.kind !== "conversation";
     }),
     [allRuns, issueById],
   );

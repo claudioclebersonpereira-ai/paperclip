@@ -4,6 +4,7 @@ import remarkGfm from "remark-gfm";
 import { cn } from "../lib/utils";
 import { useTheme } from "../context/ThemeContext";
 import { mentionChipInlineStyle, parseMentionChipHref } from "../lib/mention-chips";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 /**
  * Detects whether a string looks like a workspace file path.
@@ -35,6 +36,10 @@ function isLikelyFilePath(text: string): boolean {
   return true;
 }
 
+function isDirectoryPath(text: string): boolean {
+  return text.trim().endsWith("/");
+}
+
 interface MarkdownBodyProps {
   children: string;
   className?: string;
@@ -42,6 +47,8 @@ interface MarkdownBodyProps {
   resolveImageSrc?: (src: string) => string | null;
   /** When provided, inline code that looks like a file path becomes clickable. */
   onFilePathClick?: (path: string) => void;
+  /** When provided, inline code that looks like a directory path opens the browser to that directory. */
+  onDirPathClick?: (dirPath: string) => void;
 }
 
 let mermaidLoaderPromise: Promise<typeof import("mermaid").default> | null = null;
@@ -123,7 +130,7 @@ function MermaidDiagramBlock({ source, darkMode }: { source: string; darkMode: b
   );
 }
 
-export function MarkdownBody({ children, className, resolveImageSrc, onFilePathClick }: MarkdownBodyProps) {
+export function MarkdownBody({ children, className, resolveImageSrc, onFilePathClick, onDirPathClick }: MarkdownBodyProps) {
   const { theme } = useTheme();
   const components: Components = {
     pre: ({ node: _node, children: preChildren, ...preProps }) => {
@@ -159,14 +166,17 @@ export function MarkdownBody({ children, className, resolveImageSrc, onFilePathC
       }
       if (href?.startsWith("issue://")) {
         const issueId = href.slice("issue://".length);
-        return (
-          <a
-            href={`/issues/${issueId}`}
-            className="text-primary underline underline-offset-2 hover:text-primary/80 transition-colors"
-          >
-            {linkChildren}
-          </a>
-        );
+        if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(issueId)) {
+          return (
+            <a
+              href={`/issues/${issueId}`}
+              className="text-primary underline underline-offset-2 hover:text-primary/80 transition-colors"
+            >
+              {linkChildren}
+            </a>
+          );
+        }
+        return <span>{linkChildren}</span>;
       }
       return (
         <a href={href} rel="noreferrer">
@@ -179,32 +189,40 @@ export function MarkdownBody({ children, className, resolveImageSrc, onFilePathC
   // like file paths clickable. Only applies to inline `code` — not code blocks
   // (those are wrapped in `pre > code` and won't hit this override because the
   // `pre` override handles them).
-  if (onFilePathClick) {
+  if (onFilePathClick || onDirPathClick) {
     components.code = ({ node: _node, children: codeChildren, className: codeClassName, ...codeProps }) => {
-      // If this code element has a language class (e.g. language-js), it's a
-      // code-block <code> inside a <pre> — leave it alone.
       if (codeClassName) {
         return <code className={codeClassName} {...codeProps}>{codeChildren}</code>;
       }
       const text = flattenText(codeChildren);
       if (isLikelyFilePath(text)) {
+        const isDir = isDirectoryPath(text);
+        const handler = isDir ? onDirPathClick : onFilePathClick;
+        if (!handler) return <code {...codeProps}>{codeChildren}</code>;
+        const label = isDir ? `Browse ${text}` : `Open ${text}`;
         return (
-          <code
-            {...codeProps}
-            role="button"
-            tabIndex={0}
-            title={`Open ${text}`}
-            className="cursor-pointer underline decoration-dotted underline-offset-2 hover:text-primary transition-colors"
-            onClick={() => onFilePathClick(text)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                onFilePathClick(text);
-              }
-            }}
-          >
-            {codeChildren}
-          </code>
+          <Tooltip delayDuration={300}>
+            <TooltipTrigger asChild>
+              <code
+                {...codeProps}
+                role="button"
+                tabIndex={0}
+                className="cursor-pointer underline decoration-dotted underline-offset-2 hover:text-primary transition-colors"
+                onClick={() => handler(text)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    handler(text);
+                  }
+                }}
+              >
+                {codeChildren}
+              </code>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="text-xs">
+              {label}
+            </TooltipContent>
+          </Tooltip>
         );
       }
       return <code {...codeProps}>{codeChildren}</code>;

@@ -377,8 +377,8 @@ interface WorkspaceFileBrowserProps {
   workspaceId: string;
   onClose: () => void;
   onSaved?: () => void;
-  /** When set, skip the browser and open the editor directly to this file. */
   initialFile?: string | null;
+  initialDir?: string | null;
 }
 
 export function WorkspaceFileBrowser({
@@ -387,11 +387,11 @@ export function WorkspaceFileBrowser({
   onClose,
   onSaved,
   initialFile,
+  initialDir,
 }: WorkspaceFileBrowserProps) {
   const [selectedFile, setSelectedFile] = useState<string | null>(initialFile ?? null);
-  const [browserDir, setBrowserDir] = useState(".");
+  const [browserDir, setBrowserDir] = useState(initialDir ?? ".");
   const [browserShowHidden, setBrowserShowHidden] = useState(false);
-  // Track whether we opened directly to a file (no browser context to go back to)
   const openedDirectly = useRef(!!initialFile);
 
   useEffect(() => {

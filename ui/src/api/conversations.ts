@@ -20,6 +20,7 @@ export function isConversationIssue(issue: Issue): boolean {
 /** Extract the agent display name from a conversation issue title. */
 export function conversationAgentLabel(issue: Issue): string {
   if (!isConversationIssue(issue)) return "";
+  if (!issue.title.startsWith(CONVERSATION_PREFIX)) return issue.title;
   return issue.title.slice(CONVERSATION_PREFIX.length);
 }
 
@@ -103,6 +104,8 @@ export function ensureConversation(
   })();
 
   ensureInFlight.set(key, promise);
+  // Callers handle errors on the returned promise; suppress the unhandled
+  // rejection on this separate cleanup chain so it doesn't surface in tests.
   promise.finally(() => ensureInFlight.delete(key)).catch(() => {});
 
   return promise;
