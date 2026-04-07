@@ -2,6 +2,7 @@ import { memo, useEffect, useMemo, useRef, useState, type ChangeEvent } from "re
 import { Link, useLocation } from "react-router-dom";
 import type {
   Agent,
+  Approval,
   FeedbackDataSharingPreference,
   FeedbackVote,
   FeedbackVoteValue,
@@ -15,7 +16,7 @@ import { InlineEntitySelector, type InlineEntityOption } from "./InlineEntitySel
 import { MarkdownBody } from "./MarkdownBody";
 import { MarkdownEditor, type MarkdownEditorRef, type MentionOption } from "./MarkdownEditor";
 import { OutputFeedbackButtons } from "./OutputFeedbackButtons";
-import { StatusBadge } from "./StatusBadge";
+import { ApprovalCard } from "./ApprovalCard";
 import { AgentIcon } from "./AgentIconPicker";
 import { formatAssigneeUserLabel } from "../lib/assignees";
 import type { IssueTimelineAssignee, IssueTimelineEvent } from "../lib/issue-timeline-events";
@@ -50,6 +51,7 @@ interface CommentReassignment {
 interface CommentThreadProps {
   comments: CommentWithRunMeta[];
   queuedComments?: CommentWithRunMeta[];
+  linkedApprovals?: Approval[];
   feedbackVotes?: FeedbackVote[];
   feedbackDataSharingPreference?: FeedbackDataSharingPreference;
   feedbackTermsUrl?: string | null;
@@ -57,6 +59,12 @@ interface CommentThreadProps {
   timelineEvents?: IssueTimelineEvent[];
   companyId?: string | null;
   projectId?: string | null;
+  onApproveApproval?: (approvalId: string) => Promise<void>;
+  onRejectApproval?: (approvalId: string) => Promise<void>;
+  pendingApprovalAction?: {
+    approvalId: string;
+    action: "approve" | "reject";
+  } | null;
   onVote?: (
     commentId: string,
     vote: FeedbackVoteValue,
@@ -86,6 +94,7 @@ interface CommentThreadProps {
   emptyState?: React.ReactNode;
   onFilePathClick?: (path: string) => void;
   onDirPathClick?: (dirPath: string) => void;
+  composerDisabledReason?: string | null;
 }
 
 const DRAFT_DEBOUNCE_MS = 800;
@@ -259,6 +268,7 @@ function CommentCard({
   queued?: boolean;
   onFilePathClick?: (path: string) => void;
   onDirPathClick?: (dirPath: string) => void;
+
 }) {
   const isHighlighted = highlightCommentId === comment.id;
   const isPending = comment.clientStatus === "pending";
@@ -386,6 +396,7 @@ function CommentCard({
 
 type TimelineItem =
   | { kind: "comment"; id: string; createdAtMs: number; comment: CommentWithRunMeta }
+  | { kind: "approval"; id: string; createdAtMs: number; approval: Approval }
   | { kind: "event"; id: string; createdAtMs: number; event: IssueTimelineEvent }
   | { kind: "run"; id: string; createdAtMs: number; run: LinkedRunItem };
 
@@ -460,6 +471,9 @@ const TimelineList = memo(function TimelineList({
   currentUserId,
   companyId,
   projectId,
+  onApproveApproval,
+  onRejectApproval,
+  pendingApprovalAction,
   feedbackVoteByTargetId,
   feedbackDataSharingPreference = "prompt",
   feedbackTermsUrl = null,
@@ -475,6 +489,12 @@ const TimelineList = memo(function TimelineList({
   currentUserId?: string | null;
   companyId?: string | null;
   projectId?: string | null;
+  onApproveApproval?: (approvalId: string) => Promise<void>;
+  onRejectApproval?: (approvalId: string) => Promise<void>;
+  pendingApprovalAction?: {
+    approvalId: string;
+    action: "approve" | "reject";
+  } | null;
   feedbackVoteByTargetId?: Map<string, FeedbackVoteValue>;
   feedbackDataSharingPreference?: FeedbackDataSharingPreference;
   feedbackTermsUrl?: string | null;
@@ -504,6 +524,24 @@ const TimelineList = memo(function TimelineList({
               agentMap={agentMap}
               currentUserId={currentUserId}
             />
+          );
+        }
+
+        if (item.kind === "approval") {
+          const approval = item.approval;
+          const isPending = pendingApprovalAction?.approvalId === approval.id;
+          return (
+            <div id={`approval-${approval.id}`} key={`approval:${approval.id}`} className="py-1.5">
+              <ApprovalCard
+                approval={approval}
+                requesterAgent={approval.requestedByAgentId ? agentMap?.get(approval.requestedByAgentId) ?? null : null}
+                onApprove={onApproveApproval ? () => void onApproveApproval(approval.id) : undefined}
+                onReject={onRejectApproval ? () => void onRejectApproval(approval.id) : undefined}
+                detailLink={`/approvals/${approval.id}`}
+                isPending={isPending}
+                pendingAction={isPending ? pendingApprovalAction?.action ?? null : null}
+              />
+            </div>
           );
         }
 
@@ -569,6 +607,7 @@ const TimelineList = memo(function TimelineList({
 export function CommentThread({
   comments,
   queuedComments = [],
+  linkedApprovals = [],
   feedbackVotes = [],
   feedbackDataSharingPreference = "prompt",
   feedbackTermsUrl = null,
@@ -576,6 +615,9 @@ export function CommentThread({
   timelineEvents = [],
   companyId,
   projectId,
+  onApproveApproval,
+  onRejectApproval,
+  pendingApprovalAction = null,
   onVote,
   onAdd,
   agentMap,
@@ -599,6 +641,7 @@ export function CommentThread({
   emptyState,
   onFilePathClick,
   onDirPathClick,
+  composerDisabledReason = null,
 }: CommentThreadProps) {
   const [body, setBody] = useState("");
   const [reopen, setReopen] = useState(true);
@@ -621,6 +664,12 @@ export function CommentThread({
       createdAtMs: new Date(comment.createdAt).getTime(),
       comment,
     }));
+    const approvalItems: TimelineItem[] = linkedApprovals.map((approval) => ({
+      kind: "approval",
+      id: approval.id,
+      createdAtMs: new Date(approval.createdAt).getTime(),
+      approval,
+    }));
     const eventItems: TimelineItem[] = timelineEvents.map((event) => ({
       kind: "event",
       id: event.id,
@@ -633,17 +682,18 @@ export function CommentThread({
       createdAtMs: new Date(runTimestamp(run)).getTime(),
       run,
     }));
-    return [...commentItems, ...eventItems, ...runItems].sort((a, b) => {
+    return [...commentItems, ...approvalItems, ...eventItems, ...runItems].sort((a, b) => {
       if (a.createdAtMs !== b.createdAtMs) return a.createdAtMs - b.createdAtMs;
       if (a.kind === b.kind) return a.id.localeCompare(b.id);
       const kindOrder = {
         event: 0,
-        comment: 1,
-        run: 2,
+        approval: 1,
+        comment: 2,
+        run: 3,
       } as const;
       return kindOrder[a.kind] - kindOrder[b.kind];
     });
-  }, [comments, timelineEvents, linkedRuns]);
+  }, [comments, linkedApprovals, timelineEvents, linkedRuns]);
 
   const feedbackVoteByTargetId = useMemo(() => {
     const map = new Map<string, FeedbackVoteValue>();
@@ -782,6 +832,9 @@ export function CommentThread({
         currentUserId={currentUserId}
         companyId={companyId}
         projectId={projectId}
+        onApproveApproval={onApproveApproval}
+        onRejectApproval={onRejectApproval}
+        pendingApprovalAction={pendingApprovalAction}
         feedbackVoteByTargetId={feedbackVoteByTargetId}
         feedbackDataSharingPreference={feedbackDataSharingPreference}
         onVote={onVote ? handleFeedbackVote : undefined}
@@ -829,92 +882,98 @@ export function CommentThread({
         </div>
       )}
 
-      <div className={stickyInput ? "space-y-2 sticky bottom-0 bg-background pt-2 pb-1 max-h-[33vh] overflow-y-auto border-t border-border" : "space-y-2"}>
-        <MarkdownEditor
-          ref={editorRef}
-          value={body}
-          onChange={setBody}
-          placeholder={placeholderProp ?? "Leave a comment..."}
-          mentions={mentions}
-          onSubmit={handleSubmit}
-          imageUploadHandler={imageUploadHandler}
-          contentClassName={stickyInput ? "min-h-[60px] max-h-[25vh] overflow-y-auto text-sm" : "min-h-[60px] text-sm"}
-        />
-        <div className="flex items-center justify-end gap-3">
-          {(imageUploadHandler || onAttachImage) && (
-            <div className="mr-auto flex items-center gap-3">
-              <input
-                ref={attachInputRef}
-                type="file"
-                accept="image/png,image/jpeg,image/webp,image/gif"
-                className="hidden"
-                onChange={handleAttachFile}
-              />
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                onClick={() => attachInputRef.current?.click()}
-                disabled={attaching}
-                title="Attach image"
-              >
-                <Paperclip className="h-4 w-4" />
-              </Button>
-            </div>
-          )}
-          {!hideReopen && (
-            <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={reopen}
-                onChange={(e) => setReopen(e.target.checked)}
-                className="rounded border-border"
-              />
-              Re-open
-            </label>
-          )}
-          {enableReassign && reassignOptions.length > 0 && (
-            <InlineEntitySelector
-              value={reassignTarget}
-              options={reassignOptions}
-              placeholder="Assignee"
-              noneLabel="No assignee"
-              searchPlaceholder="Search assignees..."
-              emptyMessage="No assignees found."
-              onChange={setReassignTarget}
-              className="text-xs h-8"
-              renderTriggerValue={(option) => {
-                if (!option) return <span className="text-muted-foreground">Assignee</span>;
-                const agentId = option.id.startsWith("agent:") ? option.id.slice("agent:".length) : null;
-                const agent = agentId ? agentMap?.get(agentId) : null;
-                return (
-                  <>
-                    {agent ? (
-                      <AgentIcon icon={agent.icon} className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                    ) : null}
-                    <span className="truncate">{option.label}</span>
-                  </>
-                );
-              }}
-              renderOption={(option) => {
-                if (!option.id) return <span className="truncate">{option.label}</span>;
-                const agentId = option.id.startsWith("agent:") ? option.id.slice("agent:".length) : null;
-                const agent = agentId ? agentMap?.get(agentId) : null;
-                return (
-                  <>
-                    {agent ? (
-                      <AgentIcon icon={agent.icon} className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                    ) : null}
-                    <span className="truncate">{option.label}</span>
-                  </>
-                );
-              }}
-            />
-          )}
-          <Button size="sm" className="min-w-[5rem]" disabled={!canSubmit} onClick={handleSubmit}>
-            {submitting ? "Sending..." : (submitLabel ?? "Comment")}
-          </Button>
+      {composerDisabledReason ? (
+        <div className="rounded-md border border-amber-300/70 bg-amber-50/80 px-3 py-2 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-100">
+          {composerDisabledReason}
         </div>
-      </div>
+      ) : (
+        <div className={stickyInput ? "space-y-2 sticky bottom-0 bg-background pt-2 pb-1 max-h-[33vh] overflow-y-auto border-t border-border" : "space-y-2"}>
+          <MarkdownEditor
+            ref={editorRef}
+            value={body}
+            onChange={setBody}
+            placeholder={placeholderProp ?? "Leave a comment..."}
+            mentions={mentions}
+            onSubmit={handleSubmit}
+            imageUploadHandler={imageUploadHandler}
+            contentClassName={stickyInput ? "min-h-[60px] max-h-[25vh] overflow-y-auto text-sm" : "min-h-[60px] text-sm"}
+          />
+          <div className="flex items-center justify-end gap-3">
+            {(imageUploadHandler || onAttachImage) && (
+              <div className="mr-auto flex items-center gap-3">
+                <input
+                  ref={attachInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  className="hidden"
+                  onChange={handleAttachFile}
+                />
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={() => attachInputRef.current?.click()}
+                  disabled={attaching}
+                  title="Attach image"
+                >
+                  <Paperclip className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
+            {!hideReopen && (
+              <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={reopen}
+                  onChange={(e) => setReopen(e.target.checked)}
+                  className="rounded border-border"
+                />
+                Re-open
+              </label>
+            )}
+            {enableReassign && reassignOptions.length > 0 && (
+              <InlineEntitySelector
+                value={reassignTarget}
+                options={reassignOptions}
+                placeholder="Assignee"
+                noneLabel="No assignee"
+                searchPlaceholder="Search assignees..."
+                emptyMessage="No assignees found."
+                onChange={setReassignTarget}
+                className="text-xs h-8"
+                renderTriggerValue={(option) => {
+                  if (!option) return <span className="text-muted-foreground">Assignee</span>;
+                  const agentId = option.id.startsWith("agent:") ? option.id.slice("agent:".length) : null;
+                  const agent = agentId ? agentMap?.get(agentId) : null;
+                  return (
+                    <>
+                      {agent ? (
+                        <AgentIcon icon={agent.icon} className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      ) : null}
+                      <span className="truncate">{option.label}</span>
+                    </>
+                  );
+                }}
+                renderOption={(option) => {
+                  if (!option.id) return <span className="truncate">{option.label}</span>;
+                  const agentId = option.id.startsWith("agent:") ? option.id.slice("agent:".length) : null;
+                  const agent = agentId ? agentMap?.get(agentId) : null;
+                  return (
+                    <>
+                      {agent ? (
+                        <AgentIcon icon={agent.icon} className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      ) : null}
+                      <span className="truncate">{option.label}</span>
+                    </>
+                  );
+                }}
+              />
+            )}
+            <Button size="sm" className="min-w-[5rem]" disabled={!canSubmit} onClick={handleSubmit}>
+              {submitting ? "Sending..." : (submitLabel ?? "Comment")}
+            </Button>
+          </div>
+        </div>
+      )}
 
     </div>
   );
